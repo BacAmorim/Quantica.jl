@@ -11,19 +11,20 @@ function __init__()
 end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, LinearMaps, Random
+      ProgressMeter, LinearMaps, Random, SpecialFunctions
 
 using ExprTools
 
 using SparseArrays: getcolptr, AbstractSparseMatrix
 
 export sublat, bravais, lattice, dims, sites, supercell, unitcell,
-       hopping, onsite, @onsite!, @hopping!, parameters,
+       hopping, onsite, @onsite!, @hopping!, parameters, siteselector, hopselector,
        hamiltonian, parametric, bloch, bloch!, optimize!, similarmatrix,
        flatten, wrap, transform!, combine,
        spectrum, bandstructure, marchingmesh, defaultmethod, bands, vertices,
        energies, states,
-       momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM
+       momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM,
+       greens, greensolver
 
 export LatticePresets, RegionPresets, HamiltonianPresets
 
@@ -51,6 +52,7 @@ include("mesh.jl")
 include("diagonalizer.jl")
 include("bandstructure.jl")
 include("KPM.jl")
+include("greens.jl")
 include("convert.jl")
 
 end

@@ -16,6 +16,9 @@ toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 # Dynamic dispatch
 toSVector(v::AbstractVector) = SVector(Tuple(v))
 
+unitvector(::Type{SVector{L,T}}, i) where {L,T} =
+    SVector{L,T}(ntuple(j -> j == i ? one(T) : zero(T), Val(L)))
+
 ensuretuple(s::Tuple) = s
 ensuretuple(s) = (s,)
 
@@ -30,13 +33,29 @@ filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 @inline tuplejoin(x, y) = (x..., y...)
 @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
 
+tuplesplice(s::NTuple{N,T}, ind, el) where {N,T} = ntuple(i -> i === ind ? T(el) : s[i], Val(N))
+
 tupleproduct(p1, p2) = tupleproduct(ensuretuple(p1), ensuretuple(p2))
 tupleproduct(p1::NTuple{M,Any}, p2::NTuple{N,Any}) where {M,N} =
     ntuple(i -> (p1[1+fld(i-1, N)], p2[1+mod(i-1, N)]), Val(M * N))
 
+tupleswapfront(tup::NTuple{L}, (i, j)) where {L} =
+    i < j ? swap(swap(tup, i => 1), j => 2) : swap(swap(tup, j => 2), i => 1)
+
+swap(tup::NTuple{L}, (i, i´)) where {L} =
+    ntuple(l -> tup[ifelse(l == i´, i, ifelse(l == i, i´, l))], Val(L))
+
+tuplepairs(::Val{V}) where {V} = tuplepairs((), ntuple(identity, Val(V)))
+tuplepairs(c::Tuple, ::Tuple{}) = c
+
+function tuplepairs(c::Tuple, r::NTuple{V}) where {V}
+    t = Base.tail(r)
+    c´ = (c..., tuple.(first(r), t)...)
+    return tuplepairs(c´, t)
+end
+
 mergetuples(ts::Tuple...) = keys(merge(tonamedtuple.(ts)...))
 tonamedtuple(ts::NTuple{N,Any}) where {N} = NamedTuple{ts}(filltuple(0,Val(N)))
-
 
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
@@ -113,7 +132,8 @@ function ispositive(ndist)
     return result
 end
 
-# isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
+chop(x::T, x0 = one(T)) where {T<:Real} = ifelse(abs(x) < √eps(T(x0)), zero(T), x)
+chop(x::C, x0 = one(R)) where {R<:Real,C<:Complex{R}} = chop(real(x), x0) + im*chop(imag(x), x0)
 
 ############################################################################################
 
@@ -151,7 +171,7 @@ tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
 tuplesort(t::Tuple) = t
 tuplesort(::Missing) = missing
 
-# Like copyto! but with potentially different tensor orders (adapted from Base.copyto!)
+# Like copyto! but with potentially different tensor orders (adapted from Base.copyto!, see #33588)
 function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}, by = identity) where {T1,T2,N1,N2}
     isempty(Rdest) && return dest
@@ -298,80 +318,6 @@ function Base.factorial(n::T, k::T) where T<:Integer
 end
 
 Base.factorial(n::Integer, k::Integer) = factorial(promote(n, k)...)
-
-# ######################################################################
-# # SparseMatrixIJV
-# ######################################################################
-
-# struct SparseMatrixIJV{Tv,Ti<:Integer} <: AbstractSparseMatrix{Tv,Ti}
-#     I::Vector{Ti}
-#     J::Vector{Ti}
-#     V::Vector{Tv}
-#     m::Ti
-#     n::Ti
-#     klasttouch::Vector{Ti}
-#     csrrowptr::Vector{Ti}
-#     csrcolval::Vector{Ti}
-#     csrnzval::Vector{Tv}
-#     csccolptr::Vector{Ti}
-#     cscrowval::Vector{Ti}
-#     cscnzval::Vector{Tv}
-# end
-
-# SparseMatrixIJV{Tv}(m::Ti, n::Ti) where {Tv,Ti} = SparseMatrixIJV{Tv,Ti}(m,n)
-
-# function SparseMatrixIJV{Tv,Ti}(m::Integer, n::Integer; hintnnz = 0) where {Tv,Ti}
-#     I = Ti[]
-#     J = Ti[]
-#     V = Tv[]
-#     klasttouch = Vector{Ti}(undef, n)
-#     csrrowptr = Vector{Ti}(undef, m + 1)
-#     csrcolval = Vector{Ti}()
-#     csrnzval = Vector{Tv}()
-#     csccolptr = Vector{Ti}(undef, n + 1)
-#     cscrowval = Vector{Ti}()
-#     cscnzval = Vector{Tv}()
-
-#     if hintnnz > 0
-#         sizehint!(I, hintnnz)
-#         sizehint!(J, hintnnz)
-#         sizehint!(V, hintnnz)
-#         sizehint!(csrcolval, hintnnz)
-#         sizehint!(csrnzval, hintnnz)
-#         sizehint!(cscrowval, hintnnz)
-#         sizehint!(cscnzval, hintnnz)
-#     end
-
-#     return SparseMatrixIJV{Tv,Ti}(I, J, V, m, n, klasttouch, csrrowptr, csrcolval, csrnzval,
-#                                                              csccolptr, cscrowval, cscnzval)
-# end
-
-# Base.summary(::SparseMatrixIJV{Tv,Ti}) where {Tv,Ti} =
-#     "SparseMatrixIJV{$Tv,$Ti} : Sparse matrix builder using the IJV format"
-
-# function Base.show(io::IO, ::MIME"text/plain", s::SparseMatrixIJV)
-#     i = get(io, :indent, "")
-#     print(io, i, summary(s), "\n", "$i  Nonzero elements : $(length(s.I))")
-# end
-
-# function Base.push!(s::SparseMatrixIJV, (i, j, v))
-#     push!(s.I, i)
-#     push!(s.J, j)
-#     push!(s.V, v)
-#     return s
-# end
-
-# function SparseArrays.sparse(s::SparseMatrixIJV)
-#     numnz = length(s.I)
-#     resize!(s.csrcolval, numnz)
-#     resize!(s.csrnzval,  numnz)
-#     resize!(s.cscrowval, numnz)
-#     resize!(s.cscnzval,  numnz)
-#     return SparseArrays.sparse!(s.I, s.J, s.V, s.m, s.n, +, s.klasttouch,
-#         s.csrrowptr, s.csrcolval, s.csrnzval, s.csccolptr, s.cscrowval, s.cscnzval)
-# end
-
-# Base.size(s::SparseMatrixIJV) = (s.m, s.n)
 
 ############################################################################################
 ######## fast sparse copy #  Revise after #33589 is merged #################################

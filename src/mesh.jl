@@ -51,6 +51,8 @@ function minmax_edge_length(m::Mesh{D,T}) where {D,T<:Real}
     return sqrt(minlen2), sqrt(maxlen2)
 end
 
+transform!(f::Function, m::Mesh) = (map!(f, vertices(m), vertices(m)); m)
+
 ######################################################################
 # Compute N-simplices (N = number of vertices)
 ######################################################################
@@ -84,15 +86,13 @@ function _simplices(buffer::Tuple{P,P,V}, mesh, src) where {N,P<:AbstractArray{<
             for edge in edges(mesh, nextsrc)
                 dest = edgedest(mesh, edge)
                 dest > nextsrc || continue # If not directed, no need to check
-                dest in srcneighs && push!(partials´, modifyat(partial, pass, dest))
+                dest in srcneighs && push!(partials´, tuplesplice(partial, pass, dest))
             end
         end
         partials, partials´ = partials´, partials
     end
     return partials
 end
-
-modifyat(s::NTuple{N,T}, ind, el) where {N,T} = ntuple(i -> i === ind ? el : s[i], Val(N))
 
 function alignnormals!(simplices, vertices)
     for (i, s) in enumerate(simplices)
